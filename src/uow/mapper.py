@@ -1,0 +1,16 @@
+from collections.abc import Iterable
+from typing import Protocol
+
+
+class Connection(Protocol):
+    async def commit(self) -> None: ...
+
+    async def rollback(self) -> None: ...
+
+
+class GenericDataMapper[T](Protocol):
+    async def save(self, entities: Iterable[T]) -> None: ...
+
+    async def update(self, entities: Iterable[T]) -> None: ...
+
+    async def delete(self, entities: Iterable[T]) -> None: ...
