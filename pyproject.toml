@@ -1,13 +1,23 @@
 [tool.poetry]
 name = "uow-lib"
 version = "0.1.0"
-description = ""
-authors = ["Сократ"]
+description = "Generic Unit of Work pattern implementation for Python"
+license = "MIT"
+authors = ["Sokrat Magomedov"]
 readme = "README.md"
+keywords = ["unit-of-work", "uow", "repository-pattern"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
 packages = [{include = "uow", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.14"
+python = ">=3.12"
 
 
 [tool.poetry.group.dev.dependencies]
