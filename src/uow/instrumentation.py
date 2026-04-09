@@ -47,8 +47,10 @@ class EntityConfig:
         all_attrs: set[str] = set()
         if hasattr(self.entity_type, "__dataclass_fields__"):
             all_attrs = set(self.entity_type.__dataclass_fields__.keys())
-        elif hasattr(self.entity_type, "__annotations__"):
-            all_attrs = set(self.entity_type.__annotations__.keys())
+        else:
+            for cls in reversed(self.entity_type.__mro__):
+                if hasattr(cls, "__annotations__"):
+                    all_attrs.update(cls.__annotations__.keys())
         return frozenset(all_attrs - self.exclude_from_tracking)
 
 
