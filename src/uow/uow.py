@@ -1,58 +1,15 @@
-import enum
 from collections import defaultdict
-from typing import Any, Callable
+from typing import Any
 
-from uow.collections import (
-    DirtyDict,
-    DirtyList,
-    DirtySet,
-    TrackedList,
-    TrackedSet,
-)
+from uow._entry import _EntityState, _TrackedEntry
+from uow.children import ChildTracker
 from uow.exceptions import UntrackedEntityError
 from uow.flush import OpType, sort_operations
 from uow.identity import IdentityMap
-from uow.instrumentation import (
-    EntityConfig,
-    InstrumentationRegistry,
-    ListOf,
-    SetOf,
-    SingleOf,
-)
+from uow.instrumentation import EntityConfig, InstrumentationRegistry, SingleOf
 from uow.mapper import Connection, GenericDataMapper
-from uow.tracking import ChangeTracker, _TRACKER_ATTR
-
-_DIRTY_WRAPPERS: dict[
-    type, type[DirtyList[Any]] | type[DirtySet[Any]] | type[DirtyDict[Any, Any]]
-] = {
-    list: DirtyList,
-    set: DirtySet,
-    dict: DirtyDict,
-}
-
-
-class _EntityState(enum.Enum):
-    NEW = "new"
-    CLEAN = "clean"
-    DELETED = "deleted"
-
-
-class _TrackedEntry:
-    __slots__ = ("entity", "state", "tracker", "config", "single_children")
-
-    def __init__(
-        self,
-        entity: object,
-        state: _EntityState,
-        tracker: ChangeTracker | None,
-        config: EntityConfig,
-        single_children: dict[str, object | None],
-    ) -> None:
-        self.entity = entity
-        self.state = state
-        self.tracker = tracker
-        self.config = config
-        self.single_children = single_children
+from uow.tracking import ChangeTracker
+from uow.wrapping import CollectionInstrumentor
 
 
 class UnitOfWork:
@@ -66,6 +23,12 @@ class UnitOfWork:
         self._identity_map = IdentityMap()
         self._entries: dict[int, _TrackedEntry] = {}
         self._mappers: dict[type, GenericDataMapper[Any]] = {}
+        self._children = ChildTracker(
+            self._entries,
+            self.register_new,
+            self.register_clean,
+        )
+        self._instrumentor = CollectionInstrumentor(self._children)
 
     def register_new(self, entity: object) -> None:
         if id(entity) in self._entries:
@@ -79,9 +42,8 @@ class UnitOfWork:
             single_children={},
         )
         self._entries[id(entity)] = entry
-        self._wrap_child_collections(entity, config)
-        self._wrap_dirty_collections(entity, config)
-        self._register_all_children_new(entity, config)
+        self._instrumentor.wrap_eager(entity, config)
+        self._children.register_all_new(entity, config)
 
     def register_clean(self, entity: object) -> None:
         if id(entity) in self._entries:
@@ -92,7 +54,7 @@ class UnitOfWork:
         if not self._is_identity_empty(identity):
             self._identity_map.put(type(entity), identity, entity)
 
-        single_children = self._snapshot_single_children(entity, config)
+        single_children = ChildTracker.snapshot_singles(entity, config)
         tracker = ChangeTracker(entity, config.tracked_attrs)
         entry = _TrackedEntry(
             entity,
@@ -103,9 +65,8 @@ class UnitOfWork:
         )
         self._entries[id(entity)] = entry
         tracker.install()
-        self._wrap_child_collections_lazy(entity, config)
-        self._wrap_dirty_collections(entity, config)
-        self._register_single_children_clean(entity, config)
+        self._instrumentor.wrap_lazy(entity, config)
+        self._children.register_singles_clean(entity, config)
 
     def register_deleted(self, entity: object) -> None:
         entry = self._entries.get(id(entity))
@@ -114,7 +75,7 @@ class UnitOfWork:
                 f"{type(entity).__name__} is not tracked by this UoW"
             )
         entry.state = _EntityState.DELETED
-        self._mark_children_deleted(entity, entry.config)
+        self._children.mark_deleted(entity, entry.config)
 
     async def flush(self) -> None:
         try:
@@ -137,6 +98,8 @@ class UnitOfWork:
     async def rollback(self) -> None:
         await self._connection.rollback()
         self._detach_all()
+
+    # ── Flush internals ──────────────────────────────────────────
 
     async def _flush(self) -> None:
         operations = self._build_operations()
@@ -193,203 +156,15 @@ class UnitOfWork:
                 if new_value is not None and id(new_value) not in self._entries:
                     child_spec = entry.config.children[attr_name]
                     if isinstance(child_spec, SingleOf):
-                        self._set_parent_key(entry.entity, new_value, child_spec, entry.config)
+                        ChildTracker.set_parent_key(
+                            entry.entity, new_value, child_spec, entry.config
+                        )
                     self.register_new(new_value)
 
-    # ── Collection wrapping ────────────────────────────────────────
+    # ── Helpers ──────────────────────────────────────────────────
 
     @staticmethod
-    def _make_dirty_callback(entity: object, attr_name: str) -> Callable[[], None]:
-        def on_change() -> None:
-            tracker: ChangeTracker | None = entity.__dict__.get(_TRACKER_ATTR)
-            if tracker is not None:
-                tracker._dirty_fields.add(attr_name)
-
-        return on_change
-
-    @staticmethod
-    def _wrap_as_dirty(
-        entity: object,
-        attr_name: str,
-        value: object,
-        on_change: Callable[[], None],
-    ) -> bool:
-        wrapper_type = _DIRTY_WRAPPERS.get(type(value))
-        if wrapper_type is None:
-            return False
-        wrapped = wrapper_type(value, on_change)  # type: ignore[arg-type]
-        object.__setattr__(entity, attr_name, wrapped)
-        return True
-
-    def _wrap_child_collections(self, entity: object, config: EntityConfig) -> None:
-        for attr_name, child_spec in config.children.items():
-            child_value = getattr(entity, attr_name, None)
-            if child_value is None:
-                continue
-
-            if isinstance(child_spec, ListOf) and not isinstance(
-                child_value, TrackedList
-            ):
-                tracked_list = TrackedList(
-                    child_value,
-                    on_add=lambda item, p=entity, cs=child_spec, cfg=config: self._on_child_added(item, p, cs, cfg),  # type: ignore[misc]
-                    on_remove=lambda item: self._on_child_removed(item),
-                )
-                object.__setattr__(entity, attr_name, tracked_list)
-
-            elif isinstance(child_spec, SetOf) and not isinstance(
-                child_value, TrackedSet
-            ):
-                tracked_set = TrackedSet(
-                    child_value,
-                    on_add=lambda item, p=entity, cs=child_spec, cfg=config: self._on_child_added(item, p, cs, cfg),  # type: ignore[misc]
-                    on_remove=lambda item: self._on_child_removed(item),
-                )
-                object.__setattr__(entity, attr_name, tracked_set)
-
-    def _wrap_child_collections_lazy(self, entity: object, config: EntityConfig) -> None:
-        for attr_name, child_spec in config.children.items():
-            child_value = getattr(entity, attr_name, None)
-            if child_value is None:
-                continue
-
-            if isinstance(child_spec, ListOf) and not isinstance(
-                child_value, TrackedList
-            ):
-                tracked_list = TrackedList(
-                    child_value,
-                    on_add=lambda item, p=entity, cs=child_spec, cfg=config: self._on_child_added(item, p, cs, cfg),  # type: ignore[misc]
-                    on_remove=lambda item: self._on_child_removed(item),
-                    on_materialize=lambda e=entity, a=attr_name: self._register_collection_children_clean(e, a),  # type: ignore[misc]
-                )
-                object.__setattr__(entity, attr_name, tracked_list)
-
-            elif isinstance(child_spec, SetOf) and not isinstance(
-                child_value, TrackedSet
-            ):
-                tracked_set = TrackedSet(
-                    child_value,
-                    on_add=lambda item, p=entity, cs=child_spec, cfg=config: self._on_child_added(item, p, cs, cfg),  # type: ignore[misc]
-                    on_remove=lambda item: self._on_child_removed(item),
-                    on_materialize=lambda e=entity, a=attr_name: self._register_collection_children_clean(e, a),  # type: ignore[misc]
-                )
-                object.__setattr__(entity, attr_name, tracked_set)
-
-    def _wrap_dirty_collections(
-        self,
-        entity: object,
-        config: EntityConfig,
-    ) -> None:
-        entity_collection_attrs = {
-            name
-            for name, spec in config.children.items()
-            if isinstance(spec, (ListOf, SetOf))
-        }
-        for attr_name in config.tracked_attrs:
-            if attr_name in entity_collection_attrs:
-                continue
-            value = getattr(entity, attr_name, None)
-            if value is None:
-                continue
-            self._wrap_as_dirty(
-                entity,
-                attr_name,
-                value,
-                self._make_dirty_callback(entity, attr_name),
-            )
-
-    @staticmethod
-    def _set_parent_key(
-        parent: object,
-        child: object,
-        child_spec: ListOf | SetOf | SingleOf,
-        parent_config: EntityConfig,
-    ) -> None:
-        if child_spec.parent_key is None:
-            return
-        parent_id = getattr(parent, parent_config.identity_key[0])
-        object.__setattr__(child, child_spec.parent_key, parent_id)
-
-    def _on_child_added(
-        self,
-        item: object,
-        parent: object,
-        child_spec: ListOf | SetOf | SingleOf,
-        parent_config: EntityConfig,
-    ) -> None:
-        self._set_parent_key(parent, item, child_spec, parent_config)
-        if id(item) not in self._entries:
-            self.register_new(item)
-
-    def _on_child_removed(self, item: object) -> None:
-        entry = self._entries.get(id(item))
-        if entry is None:
-            self.register_clean(item)
-            entry = self._entries[id(item)]
-        entry.state = _EntityState.DELETED
-
-    def _register_all_children_new(self, entity: object, config: EntityConfig) -> None:
-        for attr_name, child_spec in config.children.items():
-            child_value = getattr(entity, attr_name, None)
-            if child_value is None:
-                continue
-
-            if isinstance(child_spec, SingleOf):
-                self._set_parent_key(entity, child_value, child_spec, config)
-                self.register_new(child_value)
-            elif isinstance(child_spec, (ListOf, SetOf)):
-                for child in child_value:
-                    self._set_parent_key(entity, child, child_spec, config)
-                    self.register_new(child)
-
-    def _register_single_children_clean(
-        self, entity: object, config: EntityConfig
-    ) -> None:
-        for attr_name, child_spec in config.children.items():
-            if not isinstance(child_spec, SingleOf):
-                continue
-            child_value = getattr(entity, attr_name, None)
-            if child_value is not None:
-                self._set_parent_key(entity, child_value, child_spec, config)
-                self.register_clean(child_value)
-
-    def _register_collection_children_clean(self, entity: object, attr_name: str) -> None:
-        collection = getattr(entity, attr_name, None)
-        if collection is None:
-            return
-        for child in collection:
-            self.register_clean(child)
-
-    def _mark_children_deleted(self, entity: object, config: EntityConfig) -> None:
-        for attr_name, child_spec in config.children.items():
-            child_value = getattr(entity, attr_name, None)
-            if child_value is None:
-                continue
-
-            if isinstance(child_spec, SingleOf):
-                entry = self._entries.get(id(child_value))
-                if entry is not None:
-                    entry.state = _EntityState.DELETED
-            elif isinstance(child_spec, (ListOf, SetOf)):
-                for child in child_value:
-                    entry = self._entries.get(id(child))
-                    if entry is not None:
-                        entry.state = _EntityState.DELETED
-
-    # ── Helpers ───────────────────────────────────────────────────
-
-    @staticmethod
-    def _snapshot_single_children(
-        entity: object,
-        config: EntityConfig,
-    ) -> dict[str, object | None]:
-        result: dict[str, object | None] = {}
-        for attr_name, child_spec in config.children.items():
-            if isinstance(child_spec, SingleOf):
-                result[attr_name] = getattr(entity, attr_name, None)
-        return result
-
-    def _get_identity(self, entity: object, config: EntityConfig) -> tuple[object, ...]:
+    def _get_identity(entity: object, config: EntityConfig) -> tuple[object, ...]:
         return tuple(getattr(entity, attr) for attr in config.identity_key)
 
     @staticmethod
@@ -409,7 +184,7 @@ class UnitOfWork:
                 to_remove.append(eid)
             else:
                 entry.state = _EntityState.CLEAN
-                entry.single_children = self._snapshot_single_children(
+                entry.single_children = ChildTracker.snapshot_singles(
                     entry.entity,
                     entry.config,
                 )
@@ -424,8 +199,7 @@ class UnitOfWork:
                         self._identity_map.put(
                             type(entry.entity), identity, entry.entity
                         )
-                self._wrap_child_collections_lazy(entry.entity, entry.config)
-                self._wrap_dirty_collections(entry.entity, entry.config)
+                self._instrumentor.wrap_lazy(entry.entity, entry.config)
 
         for eid in to_remove:
             del self._entries[eid]
