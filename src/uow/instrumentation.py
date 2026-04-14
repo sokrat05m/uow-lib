@@ -17,6 +17,7 @@ class ListOf:
 @dataclass(frozen=True)
 class SingleOf:
     entity_type: type
+    parent_key: str | None = None
 
 
 @dataclass(frozen=True)

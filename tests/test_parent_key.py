@@ -10,6 +10,7 @@ from uow import (
     InstrumentationRegistry,
     ListOf,
     SetOf,
+    SingleOf,
     UnitOfWork,
 )
 
@@ -28,11 +29,17 @@ class Tag:
 
 
 @dataclass
+class Detail:
+    info: str
+
+
+@dataclass
 class Post:
     id: int | None
     title: str
     comments: list[Comment] = field(default_factory=list)
     tags: set[Tag] = field(default_factory=set)
+    detail: Detail | None = None
 
 
 # ── Fake mappers ────────────────────────────────────────────────
@@ -71,6 +78,17 @@ class FakeTagMapper(GenericDataMapper[Tag]):
     async def delete(self, entities: Iterable[Tag]) -> None: ...
 
 
+class FakeDetailMapper(GenericDataMapper[Detail]):
+    def __init__(self, connection: object) -> None:
+        self.saved: list[Detail] = []
+
+    async def save(self, entities: Iterable[Detail]) -> None:
+        self.saved.extend(entities)
+
+    async def update(self, entities: Iterable[Detail]) -> None: ...
+    async def delete(self, entities: Iterable[Detail]) -> None: ...
+
+
 # ── Fixtures ────────────────────────────────────────────────────
 
 
@@ -85,6 +103,7 @@ def registry() -> InstrumentationRegistry:
             children={
                 "comments": ListOf(Comment, parent_key="post_id"),
                 "tags": SetOf(Tag, parent_key="post_id"),
+                "detail": SingleOf(Detail, parent_key="post_id"),
             },
         )
     )
@@ -101,6 +120,14 @@ def registry() -> InstrumentationRegistry:
             entity_type=Tag,
             identity_key=("post_id", "label"),
             mapper_type=FakeTagMapper,
+            depends_on=[Post],
+        )
+    )
+    reg.register(
+        EntityConfig(
+            entity_type=Detail,
+            identity_key=("post_id",),
+            mapper_type=FakeDetailMapper,
             depends_on=[Post],
         )
     )
@@ -173,6 +200,35 @@ class TestParentKeySetOf:
         post.tags.add(tag)
 
         assert tag.post_id == 8  # type: ignore[attr-defined]
+
+
+class TestParentKeySingleOf:
+    def test_register_new_sets_parent_key(self, uow: UnitOfWork) -> None:
+        detail = Detail(info="x")
+        post = Post(id=15, title="T", detail=detail)
+        uow.register_new(post)
+
+        assert detail.post_id == 15  # type: ignore[attr-defined]
+
+    def test_register_clean_sets_parent_key(self, uow: UnitOfWork) -> None:
+        detail = Detail(info="y")
+        post = Post(id=20, title="T", detail=detail)
+        uow.register_clean(post)
+
+        assert detail.post_id == 20  # type: ignore[attr-defined]
+
+    def test_replacement_sets_parent_key(self, uow: UnitOfWork) -> None:
+        old_detail = Detail(info="old")
+        post = Post(id=30, title="T", detail=old_detail)
+        uow.register_clean(post)
+
+        new_detail = Detail(info="new")
+        post.detail = new_detail
+
+        ops = uow._build_operations()
+        insert_ops = [op for op in ops if op[0].value == "insert"]
+        assert any(new_detail in op[2] for op in insert_ops)
+        assert new_detail.post_id == 30  # type: ignore[attr-defined]
 
 
 class TestParentKeyNone:

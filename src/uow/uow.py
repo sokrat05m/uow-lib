@@ -191,6 +191,9 @@ class UnitOfWork:
                     self._entries[id(old_value)].state = _EntityState.DELETED
 
                 if new_value is not None and id(new_value) not in self._entries:
+                    child_spec = entry.config.children[attr_name]
+                    if isinstance(child_spec, SingleOf):
+                        self._set_parent_key(entry.entity, new_value, child_spec, entry.config)
                     self.register_new(new_value)
 
     # ── Collection wrapping ────────────────────────────────────────
@@ -299,7 +302,7 @@ class UnitOfWork:
     def _set_parent_key(
         parent: object,
         child: object,
-        child_spec: ListOf | SetOf,
+        child_spec: ListOf | SetOf | SingleOf,
         parent_config: EntityConfig,
     ) -> None:
         if child_spec.parent_key is None:
@@ -311,7 +314,7 @@ class UnitOfWork:
         self,
         item: object,
         parent: object,
-        child_spec: ListOf | SetOf,
+        child_spec: ListOf | SetOf | SingleOf,
         parent_config: EntityConfig,
     ) -> None:
         self._set_parent_key(parent, item, child_spec, parent_config)
@@ -332,6 +335,7 @@ class UnitOfWork:
                 continue
 
             if isinstance(child_spec, SingleOf):
+                self._set_parent_key(entity, child_value, child_spec, config)
                 self.register_new(child_value)
             elif isinstance(child_spec, (ListOf, SetOf)):
                 for child in child_value:
@@ -346,6 +350,7 @@ class UnitOfWork:
                 continue
             child_value = getattr(entity, attr_name, None)
             if child_value is not None:
+                self._set_parent_key(entity, child_value, child_spec, config)
                 self.register_clean(child_value)
 
     def _register_collection_children_clean(self, entity: object, attr_name: str) -> None:
