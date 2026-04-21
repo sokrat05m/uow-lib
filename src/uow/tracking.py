@@ -33,6 +33,9 @@ class ChangeTracker:
     def get_dirty_fields(self) -> frozenset[str]:
         return frozenset(self._dirty_fields)
 
+    def discard_dirty_field(self, name: str) -> None:
+        self._dirty_fields.discard(name)
+
     def reset(self) -> None:
         self._dirty_fields.clear()
 

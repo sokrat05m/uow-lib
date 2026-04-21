@@ -1,12 +1,19 @@
 from collections import defaultdict
-from typing import Any
+from collections.abc import Iterable
+from typing import Any, cast
 
 from uow._entry import _EntityState, _TrackedEntry
 from uow.children import ChildTracker
 from uow.exceptions import UntrackedEntityError
 from uow.flush import OpType, sort_operations
 from uow.identity import IdentityMap
-from uow.instrumentation import EntityConfig, InstrumentationRegistry, SingleOf
+from uow.instrumentation import (
+    EntityConfig,
+    InstrumentationRegistry,
+    ListOf,
+    SetOf,
+    SingleOf,
+)
 from uow.mapper import Connection, GenericDataMapper
 from uow.tracking import ChangeTracker
 from uow.wrapping import CollectionInstrumentor
@@ -40,9 +47,11 @@ class UnitOfWork:
             tracker=None,
             config=config,
             single_children={},
+            collection_refs={},
         )
         self._entries[id(entity)] = entry
         self._instrumentor.wrap_eager(entity, config)
+        entry.collection_refs = ChildTracker.snapshot_collection_refs(entity, config)
         self._children.register_all_new(entity, config)
 
     def register_clean(self, entity: object) -> None:
@@ -62,10 +71,12 @@ class UnitOfWork:
             tracker=tracker,
             config=config,
             single_children=single_children,
+            collection_refs={},
         )
         self._entries[id(entity)] = entry
         tracker.install()
         self._instrumentor.wrap_lazy(entity, config)
+        entry.collection_refs = ChildTracker.snapshot_collection_refs(entity, config)
         self._children.register_singles_clean(entity, config)
 
     def register_deleted(self, entity: object) -> None:
@@ -80,24 +91,22 @@ class UnitOfWork:
     async def flush(self) -> None:
         try:
             await self._flush()
+            self._post_flush_cleanup()
         except Exception:
-            await self._connection.rollback()
-            self._detach_all()
+            await self._rollback_and_detach()
             raise
-        self._post_flush_cleanup()
 
     async def commit(self) -> None:
         try:
             await self._flush()
+            self._post_flush_cleanup()
             await self._connection.commit()
         except Exception:
-            await self._connection.rollback()
+            await self._rollback_and_detach()
             raise
-        self._post_flush_cleanup()
 
     async def rollback(self) -> None:
-        await self._connection.rollback()
-        self._detach_all()
+        await self._rollback_and_detach()
 
     # ── Flush internals ──────────────────────────────────────────
 
@@ -122,6 +131,7 @@ class UnitOfWork:
 
     def _build_operations(self) -> list[tuple[OpType, type, list[object]]]:
         self._detect_single_replacements()
+        self._detect_collection_replacements()
 
         groups: dict[tuple[OpType, type], list[object]] = defaultdict(list)
 
@@ -150,6 +160,10 @@ class UnitOfWork:
                 old_value = entry.single_children[attr_name]
                 new_value = getattr(entry.entity, attr_name, None)
 
+                if new_value is old_value:
+                    entry.tracker.discard_dirty_field(attr_name)
+                    continue
+
                 if old_value is not None and id(old_value) in self._entries:
                     self._entries[id(old_value)].state = _EntityState.DELETED
 
@@ -160,6 +174,65 @@ class UnitOfWork:
                             entry.entity, new_value, child_spec, entry.config
                         )
                     self.register_new(new_value)
+
+    def _detect_collection_replacements(self) -> None:
+        for entry in list(self._entries.values()):
+            if entry.state is _EntityState.DELETED:
+                continue
+
+            dirty_fields = (
+                entry.tracker.get_dirty_fields() if entry.tracker is not None else None
+            )
+            should_rewrap = entry.state is _EntityState.NEW
+
+            for attr_name, old_collection in entry.collection_refs.items():
+                if dirty_fields is not None and attr_name not in dirty_fields:
+                    continue
+
+                child_spec = entry.config.children[attr_name]
+                if not isinstance(child_spec, (ListOf, SetOf)):
+                    continue
+
+                current_collection = cast(
+                    Iterable[object] | None,
+                    getattr(entry.entity, attr_name, None),
+                )
+                if current_collection is old_collection:
+                    continue
+
+                old_children = (
+                    {} if old_collection is None else {id(child): child for child in old_collection}
+                )
+                current_children = (
+                    {}
+                    if current_collection is None
+                    else {id(child): child for child in current_collection}
+                )
+
+                for child_id, child in old_children.items():
+                    if child_id not in current_children:
+                        self._children.on_removed(child)
+
+                for child_id, child in current_children.items():
+                    if child_id not in old_children:
+                        self._children.on_added(
+                            child,
+                            entry.entity,
+                            child_spec,
+                            entry.config,
+                        )
+
+                should_rewrap = True
+
+            if should_rewrap:
+                if entry.state is _EntityState.NEW:
+                    self._instrumentor.wrap_eager(entry.entity, entry.config)
+                else:
+                    self._instrumentor.wrap_lazy(entry.entity, entry.config)
+                entry.collection_refs = ChildTracker.snapshot_collection_refs(
+                    entry.entity,
+                    entry.config,
+                )
 
     # ── Helpers ──────────────────────────────────────────────────
 
@@ -200,6 +273,10 @@ class UnitOfWork:
                             type(entry.entity), identity, entry.entity
                         )
                 self._instrumentor.wrap_lazy(entry.entity, entry.config)
+                entry.collection_refs = ChildTracker.snapshot_collection_refs(
+                    entry.entity,
+                    entry.config,
+                )
 
         for eid in to_remove:
             del self._entries[eid]
@@ -211,3 +288,9 @@ class UnitOfWork:
         self._entries.clear()
         self._identity_map.clear()
         self._mappers.clear()
+
+    async def _rollback_and_detach(self) -> None:
+        try:
+            await self._connection.rollback()
+        finally:
+            self._detach_all()

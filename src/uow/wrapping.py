@@ -1,5 +1,6 @@
 import functools
-from typing import Any, Callable
+from collections.abc import Iterable
+from typing import Any, Callable, cast
 
 from uow.children import ChildTracker
 from uow.collections import DirtyDict, DirtyList, DirtySet, TrackedList, TrackedSet
@@ -42,15 +43,27 @@ class CollectionInstrumentor:
     ) -> None:
         children = self._children
         for attr_name, child_spec in config.children.items():
+            if not isinstance(child_spec, (ListOf, SetOf)):
+                continue
+
             child_value = getattr(entity, attr_name, None)
             if child_value is None:
                 continue
 
-            on_add = lambda item, p=entity, cs=child_spec, cfg=config: children.on_added(item, p, cs, cfg)
-            on_remove = lambda item: children.on_removed(item)
+            on_add = functools.partial(
+                children.on_added,
+                parent=entity,
+                child_spec=child_spec,
+                parent_config=config,
+            )
+            on_remove = children.on_removed
             on_materialize: Callable[[], None] | None = None
             if lazy:
-                on_materialize = lambda e=entity, a=attr_name: children.register_collection_clean(e, a)  # type: ignore[misc]
+                collection = cast(Iterable[object] | None, child_value)
+                on_materialize = functools.partial(
+                    children.register_collection_clean,
+                    collection,
+                )
 
             if isinstance(child_spec, ListOf) and not isinstance(
                 child_value, TrackedList

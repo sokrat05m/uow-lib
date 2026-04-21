@@ -78,6 +78,22 @@ class TestListTracking:
         assert insert_ops[0][1] is OrderItem
         assert insert_ops[0][2] == [new_item]
 
+    def test_append_to_list_with_single_sibling_registers_new(
+        self, order_uow: UnitOfWork
+    ) -> None:
+        delivery = Delivery(id=20, address="123 Main")
+        order = Order(id=1, customer="Alice", items=[], delivery=delivery)
+        order_uow.register_clean(order)
+
+        new_item = OrderItem(id=None, product="Y", qty=2)
+        order.items.append(new_item)
+
+        ops = order_uow._build_operations()
+        insert_ops = [op for op in ops if op[0].value == "insert"]
+        assert len(insert_ops) == 1
+        assert insert_ops[0][1] is OrderItem
+        assert insert_ops[0][2] == [new_item]
+
     def test_remove_from_list_marks_deleted(self, order_uow: UnitOfWork) -> None:
         item = OrderItem(id=10, product="Z", qty=1)
         order = Order(id=1, customer="Alice", items=[item], delivery=None)
@@ -106,6 +122,16 @@ class TestSingleOfReplacement:
 
         assert any(op[1] is Delivery for op in delete_ops)
         assert any(op[1] is Delivery for op in insert_ops)
+
+    def test_self_assign_single_child_is_noop(self, order_uow: UnitOfWork) -> None:
+        delivery = Delivery(id=1, address="Main St")
+        order = Order(id=1, customer="Alice", items=[], delivery=delivery)
+        order_uow.register_clean(order)
+
+        order.delivery = order.delivery
+
+        ops = order_uow._build_operations()
+        assert ops == []
 
 
 class TestFlushOrder:

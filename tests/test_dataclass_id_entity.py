@@ -226,6 +226,50 @@ class TestDataclassIdIdentityMap:
 
 class TestDataclassIdCommit:
     @pytest.mark.asyncio
+    async def test_flush_duplicate_identity_during_cleanup_rolls_back_and_detaches(
+        self, user_uow: UnitOfWork
+    ) -> None:
+        uid = UserId(uuid4())
+        user1 = User(entity_id=uid, full_name="Alice")
+        user2 = User(entity_id=uid, full_name="Bob")
+        connection = cast(AsyncMock, user_uow._connection)
+
+        user_uow.register_new(user1)
+        user_uow.register_new(user2)
+
+        with pytest.raises(DuplicateEntityError):
+            await user_uow.flush()
+
+        connection.rollback.assert_awaited_once()
+        connection.commit.assert_not_awaited()
+        assert user_uow._entries == {}
+        assert user_uow._identity_map._map == {}
+        assert "_uow_tracker_" not in user1.__dict__
+        assert "_uow_tracker_" not in user2.__dict__
+
+    @pytest.mark.asyncio
+    async def test_commit_duplicate_identity_during_cleanup_rolls_back_before_commit(
+        self, user_uow: UnitOfWork
+    ) -> None:
+        uid = UserId(uuid4())
+        user1 = User(entity_id=uid, full_name="Alice")
+        user2 = User(entity_id=uid, full_name="Bob")
+        connection = cast(AsyncMock, user_uow._connection)
+
+        user_uow.register_new(user1)
+        user_uow.register_new(user2)
+
+        with pytest.raises(DuplicateEntityError):
+            await user_uow.commit()
+
+        connection.rollback.assert_awaited_once()
+        connection.commit.assert_not_awaited()
+        assert user_uow._entries == {}
+        assert user_uow._identity_map._map == {}
+        assert "_uow_tracker_" not in user1.__dict__
+        assert "_uow_tracker_" not in user2.__dict__
+
+    @pytest.mark.asyncio
     async def test_commit_update(self, user_uow: UnitOfWork) -> None:
         user = User(entity_id=UserId(uuid4()), full_name="Alice")
         user_uow.register_clean(user)

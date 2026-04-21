@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Callable
 
 from uow._entry import _EntityState, _TrackedEntry
@@ -43,7 +44,30 @@ class ChildTracker:
         if entry is None:
             self._register_clean(item)
             entry = self._entries[id(item)]
+        if entry.state is _EntityState.NEW:
+            self._discard_new(item)
+            return
         entry.state = _EntityState.DELETED
+
+    def _discard_new(self, entity: object) -> None:
+        entry = self._entries.get(id(entity))
+        if entry is None:
+            return
+
+        for attr_name, child_spec in entry.config.children.items():
+            child_value = getattr(entity, attr_name, None)
+            if child_value is None:
+                continue
+            if isinstance(child_spec, SingleOf):
+                self._discard_new(child_value)
+                continue
+            if isinstance(child_spec, (ListOf, SetOf)):
+                for child in child_value:
+                    self._discard_new(child)
+
+        if entry.tracker is not None:
+            entry.tracker.uninstall()
+        del self._entries[id(entity)]
 
     def register_all_new(self, entity: object, config: EntityConfig) -> None:
         for attr_name, child_spec in config.children.items():
@@ -67,8 +91,10 @@ class ChildTracker:
                 self.set_parent_key(entity, child_value, child_spec, config)
                 self._register_clean(child_value)
 
-    def register_collection_clean(self, entity: object, attr_name: str) -> None:
-        collection = getattr(entity, attr_name, None)
+    def register_collection_clean(
+        self,
+        collection: Iterable[object] | None,
+    ) -> None:
         if collection is None:
             return
         for child in collection:
@@ -98,4 +124,16 @@ class ChildTracker:
         for attr_name, child_spec in config.children.items():
             if isinstance(child_spec, SingleOf):
                 result[attr_name] = getattr(entity, attr_name, None)
+        return result
+
+    @staticmethod
+    def snapshot_collection_refs(
+        entity: object,
+        config: EntityConfig,
+    ) -> dict[str, Iterable[object] | None]:
+        result: dict[str, Iterable[object] | None] = {}
+        for attr_name, child_spec in config.children.items():
+            if not isinstance(child_spec, (ListOf, SetOf)):
+                continue
+            result[attr_name] = getattr(entity, attr_name, None)
         return result
