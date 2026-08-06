@@ -90,7 +90,10 @@ class InstrumentationRegistry:
     def register(self, config: EntityConfig) -> None:
         for attr_name, child_spec in config.children.items():
             if isinstance(child_spec, (EmbeddedOf, CollectionOfEmbedded)):
-                self._validate_embedded(child_spec.value_object_type, attr_name)
+                self._validate_embedded(
+                    child_spec.value_object_type,
+                    attr_name,
+                )
         self._configs[config.entity_type] = config
 
     @staticmethod
@@ -98,7 +101,8 @@ class InstrumentationRegistry:
         params = getattr(vo_type, "__dataclass_params__", None)
         if params is None or not params.frozen:
             raise TypeError(
-                f"EmbeddedOf('{attr_name}'): {vo_type.__name__} must be a frozen dataclass"
+                f"EmbeddedOf('{attr_name}'): {vo_type.__name__} "
+                "must be a frozen dataclass",
             )
 
     def get(self, entity_type: type) -> EntityConfig:
@@ -106,7 +110,7 @@ class InstrumentationRegistry:
             return self._configs[entity_type]
         except KeyError:
             raise UnregisteredEntityError(
-                f"No config registered for {entity_type.__name__}"
+                f"No config registered for {entity_type.__name__}",
             )
 
     def all_configs(self) -> dict[type, EntityConfig]:

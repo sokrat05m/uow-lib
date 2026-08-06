@@ -1,8 +1,15 @@
-from dataclasses import dataclass, field
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 from unittest.mock import AsyncMock
 
-from uow import EntityConfig, GenericDataMapper, InstrumentationRegistry, ListOf, SetOf, UnitOfWork
+from uow import (
+    EntityConfig,
+    GenericDataMapper,
+    InstrumentationRegistry,
+    ListOf,
+    SetOf,
+    UnitOfWork,
+)
 
 
 @dataclass
@@ -56,7 +63,7 @@ def build_uow() -> UnitOfWork:
                 "comments": ListOf(Comment, parent_key="post_id"),
                 "tags": SetOf(Tag, parent_key="post_id"),
             },
-        )
+        ),
     )
     registry.register(
         EntityConfig(
@@ -64,7 +71,7 @@ def build_uow() -> UnitOfWork:
             identity_key=("id",),
             mapper_type=FakeCommentMapper,
             depends_on=[Post],
-        )
+        ),
     )
     registry.register(
         EntityConfig(
@@ -72,7 +79,7 @@ def build_uow() -> UnitOfWork:
             identity_key=("id",),
             mapper_type=FakeTagMapper,
             depends_on=[Post],
-        )
+        ),
     )
     return UnitOfWork(AsyncMock(), registry)
 
@@ -91,14 +98,22 @@ class TestCollectionReplacement:
         delete_ops = [op for op in ops if op[0].value == "delete"]
         insert_ops = [op for op in ops if op[0].value == "insert"]
 
-        assert any(op[1] is Comment and old_comment in op[2] for op in delete_ops)
-        assert any(op[1] is Comment and new_comment in op[2] for op in insert_ops)
+        assert any(
+            op[1] is Comment and old_comment in op[2] for op in delete_ops
+        )
+        assert any(
+            op[1] is Comment and new_comment in op[2] for op in insert_ops
+        )
         assert new_comment.post_id == 10  # type: ignore[attr-defined]
         later = Comment(id=None, text="later")
         post.comments.append(later)
 
         ops = uow._build_operations()
-        assert any(op[1] is Comment and later in op[2] for op in ops if op[0].value == "insert")
+        assert any(
+            op[1] is Comment and later in op[2]
+            for op in ops
+            if op[0].value == "insert"
+        )
 
     def test_replace_set_marks_removed_and_added_children(self) -> None:
         uow = build_uow()
@@ -120,7 +135,11 @@ class TestCollectionReplacement:
         post.tags.add(later)
 
         ops = uow._build_operations()
-        assert any(op[1] is Tag and later in op[2] for op in ops if op[0].value == "insert")
+        assert any(
+            op[1] is Tag and later in op[2]
+            for op in ops
+            if op[0].value == "insert"
+        )
 
     def test_replace_after_append_cancels_pending_insert(self) -> None:
         uow = build_uow()
@@ -132,6 +151,8 @@ class TestCollectionReplacement:
         post.comments = []
 
         ops = uow._build_operations()
-        insert_ops = [op for op in ops if op[0].value == "insert" and op[1] is Comment]
+        insert_ops = [
+            op for op in ops if op[0].value == "insert" and op[1] is Comment
+        ]
 
         assert insert_ops == []

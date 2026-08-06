@@ -6,7 +6,9 @@ class TestTrackedList:
         added: list[int] = []
         removed: list[int] = []
         tl: TrackedList[int] = TrackedList(
-            [1, 2], on_add=added.append, on_remove=removed.append
+            [1, 2],
+            on_add=added.append,
+            on_remove=removed.append,
         )
 
         tl.append(3)
@@ -17,7 +19,9 @@ class TestTrackedList:
         added: list[int] = []
         removed: list[int] = []
         tl: TrackedList[int] = TrackedList(
-            [1, 2, 3], on_add=added.append, on_remove=removed.append
+            [1, 2, 3],
+            on_add=added.append,
+            on_remove=removed.append,
         )
 
         tl.remove(2)
@@ -27,7 +31,9 @@ class TestTrackedList:
     def test_pop(self) -> None:
         removed: list[int] = []
         tl: TrackedList[int] = TrackedList(
-            [1, 2, 3], on_add=lambda x: None, on_remove=removed.append
+            [1, 2, 3],
+            on_add=lambda x: None,
+            on_remove=removed.append,
         )
 
         val = tl.pop()
@@ -38,7 +44,9 @@ class TestTrackedList:
         added: list[int] = []
         removed: list[int] = []
         tl: TrackedList[int] = TrackedList(
-            [1, 2, 3], on_add=added.append, on_remove=removed.append
+            [1, 2, 3],
+            on_add=added.append,
+            on_remove=removed.append,
         )
 
         tl[1] = 20
@@ -49,7 +57,9 @@ class TestTrackedList:
     def test_clear(self) -> None:
         removed: list[int] = []
         tl: TrackedList[int] = TrackedList(
-            [1, 2], on_add=lambda x: None, on_remove=removed.append
+            [1, 2],
+            on_add=lambda x: None,
+            on_remove=removed.append,
         )
 
         tl.clear()

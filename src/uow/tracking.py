@@ -1,3 +1,5 @@
+import contextlib
+
 _TRACKER_ATTR = "_uow_tracker_"
 _ORIGINAL_SETATTR = "_uow_original_setattr_"
 
@@ -21,10 +23,8 @@ class ChangeTracker:
         _patch_class(self._original_class)
 
     def uninstall(self) -> None:
-        try:
+        with contextlib.suppress(AttributeError):
             object.__delattr__(self._entity, _TRACKER_ATTR)
-        except AttributeError:
-            pass
 
     @property
     def is_dirty(self) -> bool:
@@ -44,8 +44,8 @@ def _tracking_setattr(self: object, name: str, value: object) -> None:
     if name != _TRACKER_ATTR:
         instance_dict = object.__getattribute__(self, "__dict__")
         tracker: ChangeTracker | None = instance_dict.get(_TRACKER_ATTR)
-        if tracker is not None and name in tracker._tracked_attrs:
-            tracker._dirty_fields.add(name)
+        if tracker is not None and name in tracker._tracked_attrs:  # noqa: SLF001
+            tracker._dirty_fields.add(name)  # noqa: SLF001
     original_setattr = type.__getattribute__(type(self), _ORIGINAL_SETATTR)
     if original_setattr is not None:
         original_setattr(self, name, value)

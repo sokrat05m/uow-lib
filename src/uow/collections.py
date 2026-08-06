@@ -1,4 +1,4 @@
-from typing import Any, Iterable, Callable, Mapping, Protocol, SupportsIndex
+from typing import Any, Callable, Iterable, Mapping, Protocol, SupportsIndex
 
 
 class HasMaterialize(Protocol):
@@ -54,7 +54,7 @@ class DirtyList[T](list[T]):
         super().__delitem__(index)
         self._on_change()
 
-    def __iadd__(self, other: Iterable[T]) -> "DirtyList[T]":  # type: ignore[override, misc]
+    def __iadd__(self, other: Iterable[T]) -> DirtyList[T]:  # type: ignore[override, misc]
         super().__iadd__(other)
         self._on_change()
         return self
@@ -91,13 +91,13 @@ class DirtySet[T](set[T]):
         super().clear()
         self._on_change()
 
-    def __ior__(self, other: Iterable[T]) -> "DirtySet[T]":  # type: ignore[override, misc]
+    def __ior__(self, other: Iterable[T]) -> DirtySet[T]:  # type: ignore[override, misc]
         for item in other:
             super().add(item)
         self._on_change()
         return self
 
-    def __isub__(self, other: Iterable[T]) -> "DirtySet[T]":  # type: ignore[override, misc]
+    def __isub__(self, other: Iterable[T]) -> DirtySet[T]:  # type: ignore[override, misc]
         for item in other:
             super().discard(item)
         self._on_change()
@@ -126,7 +126,11 @@ class DirtyDict[K, V](dict[K, V]):
         self._on_change()
         return result
 
-    def update(self, m: Mapping[K, V] | Iterable[tuple[K, V]] = (), **kwargs: Any) -> None:  # type: ignore[override]
+    def update(
+        self,
+        m: Mapping[K, V] | Iterable[tuple[K, V]] = (),
+        **kwargs: Any,
+    ) -> None:  # type: ignore[override]
         super().update(m, **kwargs)
         self._on_change()
 
@@ -225,7 +229,7 @@ class TrackedList[T](list[T]):
             super().__delitem__(index)
             self._on_remove(old)
 
-    def __iadd__(self, other: Iterable[T]) -> "TrackedList[T]":  # type: ignore[override, misc]
+    def __iadd__(self, other: Iterable[T]) -> TrackedList[T]:  # type: ignore[override, misc]
         ensure_materialized(self)
         items = list(other)
         super().__iadd__(items)
@@ -281,13 +285,13 @@ class TrackedSet[T](set[T]):
         for item in old:
             self._on_remove(item)
 
-    def __ior__(self, other: Iterable[T]) -> "TrackedSet[T]":  # type: ignore[override, misc]
+    def __ior__(self, other: Iterable[T]) -> TrackedSet[T]:  # type: ignore[override, misc]
         ensure_materialized(self)
         for item in other:
             self.add(item)
         return self
 
-    def __isub__(self, other: Iterable[T]) -> "TrackedSet[T]":  # type: ignore[override, misc]
+    def __isub__(self, other: Iterable[T]) -> TrackedSet[T]:  # type: ignore[override, misc]
         ensure_materialized(self)
         for item in other:
             self.discard(item)

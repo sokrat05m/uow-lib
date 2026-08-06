@@ -82,7 +82,11 @@ class ChildTracker:
                     self.set_parent_key(entity, child, child_spec, config)
                     self._register_new(child)
 
-    def register_singles_clean(self, entity: object, config: EntityConfig) -> None:
+    def register_singles_clean(
+        self,
+        entity: object,
+        config: EntityConfig,
+    ) -> None:
         for attr_name, child_spec in config.children.items():
             if not isinstance(child_spec, SingleOf):
                 continue

@@ -14,7 +14,6 @@ from uow import (
     UnitOfWork,
 )
 
-
 # ── Domain objects ──────────────────────────────────────────────
 
 
@@ -105,7 +104,7 @@ def registry() -> InstrumentationRegistry:
                 "tags": SetOf(Tag, parent_key="post_id"),
                 "detail": SingleOf(Detail, parent_key="post_id"),
             },
-        )
+        ),
     )
     reg.register(
         EntityConfig(
@@ -113,7 +112,7 @@ def registry() -> InstrumentationRegistry:
             identity_key=("post_id", "text"),
             mapper_type=FakeCommentMapper,
             depends_on=[Post],
-        )
+        ),
     )
     reg.register(
         EntityConfig(
@@ -121,7 +120,7 @@ def registry() -> InstrumentationRegistry:
             identity_key=("post_id", "label"),
             mapper_type=FakeTagMapper,
             depends_on=[Post],
-        )
+        ),
     )
     reg.register(
         EntityConfig(
@@ -129,7 +128,7 @@ def registry() -> InstrumentationRegistry:
             identity_key=("post_id",),
             mapper_type=FakeDetailMapper,
             depends_on=[Post],
-        )
+        ),
     )
     return reg
 
@@ -144,7 +143,8 @@ def uow(registry: InstrumentationRegistry) -> UnitOfWork:
 
 class TestParentKeyListOf:
     def test_register_new_sets_parent_key_on_initial_children(
-        self, uow: UnitOfWork
+        self,
+        uow: UnitOfWork,
     ) -> None:
         comment = Comment(text="hello")
         post = Post(id=42, title="T", comments=[comment])
@@ -184,7 +184,8 @@ class TestParentKeyListOf:
 
 class TestParentKeySetOf:
     def test_register_new_sets_parent_key_on_initial_children(
-        self, uow: UnitOfWork
+        self,
+        uow: UnitOfWork,
     ) -> None:
         tag = Tag(label="python")
         post = Post(id=10, title="T", tags={tag})
@@ -240,7 +241,7 @@ class TestParentKeyNone:
                 identity_key=("id",),
                 mapper_type=FakePostMapper,
                 children={"comments": ListOf(Comment)},
-            )
+            ),
         )
         reg.register(
             EntityConfig(
@@ -248,7 +249,7 @@ class TestParentKeyNone:
                 identity_key=("text",),
                 mapper_type=FakeCommentMapper,
                 depends_on=[Post],
-            )
+            ),
         )
         uow = UnitOfWork(AsyncMock(), reg)
 
@@ -261,7 +262,10 @@ class TestParentKeyNone:
 
 class TestParentKeyFlush:
     @pytest.mark.asyncio
-    async def test_parent_key_available_at_flush(self, uow: UnitOfWork) -> None:
+    async def test_parent_key_available_at_flush(
+        self,
+        uow: UnitOfWork,
+    ) -> None:
         post = Post(id=99, title="T")
         uow.register_new(post)
 

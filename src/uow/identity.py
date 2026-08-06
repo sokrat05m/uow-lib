@@ -8,11 +8,16 @@ class IdentityMap:
     def get(self, entity_type: type, key: tuple[object, ...]) -> object | None:
         return self._map.get((entity_type, key))
 
-    def put(self, entity_type: type, key: tuple[object, ...], entity: object) -> None:
+    def put(
+        self,
+        entity_type: type,
+        key: tuple[object, ...],
+        entity: object,
+    ) -> None:
         map_key = (entity_type, key)
         if map_key in self._map:
             raise DuplicateEntityError(
-                f"{entity_type.__name__} with key {key} already registered"
+                f"{entity_type.__name__} with key {key} already registered",
             )
         self._map[map_key] = entity
 

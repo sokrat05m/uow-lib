@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from uow import (
+    EmbeddedOf,
+    EntityConfig,
     GenericDataMapper,
     InstrumentationRegistry,
-    EntityConfig,
-    EmbeddedOf,
     UnitOfWork,
 )
 
@@ -51,13 +51,16 @@ def registry() -> InstrumentationRegistry:
             identity_key=("id",),
             mapper_type=FakeCustomerMapper,
             children={"address": EmbeddedOf(Address)},
-        )
+        ),
     )
     return reg
 
 
 @pytest.fixture
-def uow(fake_connection: AsyncMock, registry: InstrumentationRegistry) -> UnitOfWork:
+def uow(
+    fake_connection: AsyncMock,
+    registry: InstrumentationRegistry,
+) -> UnitOfWork:
     return UnitOfWork(fake_connection, registry)
 
 
@@ -75,7 +78,7 @@ class TestEmbeddedOfRegistration:
                     identity_key=("id",),
                     mapper_type=FakeCustomerMapper,
                     children={"address": EmbeddedOf(MutableVO)},
-                )
+                ),
             )
 
     def test_rejects_plain_class(self) -> None:
@@ -90,7 +93,7 @@ class TestEmbeddedOfRegistration:
                     identity_key=("id",),
                     mapper_type=FakeCustomerMapper,
                     children={"address": EmbeddedOf(PlainVO)},
-                )
+                ),
             )
 
     def test_accepts_frozen_dataclass(self) -> None:
@@ -101,14 +104,18 @@ class TestEmbeddedOfRegistration:
                 identity_key=("id",),
                 mapper_type=FakeCustomerMapper,
                 children={"address": EmbeddedOf(Address)},
-            )
+            ),
         )
         assert reg.get(Customer) is not None
 
 
 class TestEmbeddedOfTracking:
     def test_replace_vo_marks_parent_dirty(self, uow: UnitOfWork) -> None:
-        customer = Customer(id=1, name="Alice", address=Address("Main St", "NYC"))
+        customer = Customer(
+            id=1,
+            name="Alice",
+            address=Address("Main St", "NYC"),
+        )
         uow.register_clean(customer)
 
         customer.address = Address("Oak Ave", "LA")
@@ -119,7 +126,11 @@ class TestEmbeddedOfTracking:
         assert ops[0][1] is Customer
 
     def test_set_vo_to_none_marks_dirty(self, uow: UnitOfWork) -> None:
-        customer = Customer(id=1, name="Alice", address=Address("Main St", "NYC"))
+        customer = Customer(
+            id=1,
+            name="Alice",
+            address=Address("Main St", "NYC"),
+        )
         uow.register_clean(customer)
 
         customer.address = None
@@ -139,21 +150,35 @@ class TestEmbeddedOfTracking:
         assert ops[0][0].value == "update"
 
     def test_no_vo_change_no_update(self, uow: UnitOfWork) -> None:
-        customer = Customer(id=1, name="Alice", address=Address("Main St", "NYC"))
+        customer = Customer(
+            id=1,
+            name="Alice",
+            address=Address("Main St", "NYC"),
+        )
         uow.register_clean(customer)
 
         ops = uow._build_operations()
         assert ops == []
 
-    def test_vo_not_registered_as_separate_entity(self, uow: UnitOfWork) -> None:
+    def test_vo_not_registered_as_separate_entity(
+        self,
+        uow: UnitOfWork,
+    ) -> None:
         addr = Address("Main St", "NYC")
         customer = Customer(id=1, name="Alice", address=addr)
         uow.register_clean(customer)
 
         assert id(addr) not in uow._entries
 
-    def test_new_entity_with_vo_produces_single_insert(self, uow: UnitOfWork) -> None:
-        customer = Customer(id=None, name="Alice", address=Address("Main St", "NYC"))
+    def test_new_entity_with_vo_produces_single_insert(
+        self,
+        uow: UnitOfWork,
+    ) -> None:
+        customer = Customer(
+            id=None,
+            name="Alice",
+            address=Address("Main St", "NYC"),
+        )
         uow.register_new(customer)
 
         ops = uow._build_operations()
@@ -163,7 +188,11 @@ class TestEmbeddedOfTracking:
 
     @pytest.mark.asyncio
     async def test_commit_with_vo_replacement(self, uow: UnitOfWork) -> None:
-        customer = Customer(id=1, name="Alice", address=Address("Main St", "NYC"))
+        customer = Customer(
+            id=1,
+            name="Alice",
+            address=Address("Main St", "NYC"),
+        )
         uow.register_clean(customer)
 
         customer.address = Address("Oak Ave", "LA")

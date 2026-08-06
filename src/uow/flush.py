@@ -28,7 +28,8 @@ def sort_operations(
     updates = [op for op in operations if op[0] is OpType.UPDATE]
     deletes = [op for op in operations if op[0] is OpType.DELETE]
 
-    key = lambda item: _depth_sort_key(depth, item)
+    key = lambda item: _depth_sort_key(depth, item)  # noqa: E731
+
     inserts.sort(key=key)
     updates.sort(key=key)
     deletes.sort(key=key, reverse=True)
@@ -36,7 +37,9 @@ def sort_operations(
     return inserts + updates + deletes
 
 
-def _compute_depth_levels(registry: InstrumentationRegistry) -> dict[type, int]:
+def _compute_depth_levels(
+    registry: InstrumentationRegistry,
+) -> dict[type, int]:
     configs = registry.all_configs()
     in_degree: dict[type, int] = {t: 0 for t in configs}
     adjacency: dict[type, list[type]] = {t: [] for t in configs}
@@ -62,6 +65,6 @@ def _compute_depth_levels(registry: InstrumentationRegistry) -> dict[type, int]:
 
     if visited != len(configs):
         raise CyclicDependencyError(
-            "Circular dependency detected among entity configs"
+            "Circular dependency detected among entity configs",
         )
     return depth

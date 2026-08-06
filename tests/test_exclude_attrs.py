@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from uow import GenericDataMapper, InstrumentationRegistry, EntityConfig, UnitOfWork
+from uow import (
+    EntityConfig,
+    GenericDataMapper,
+    InstrumentationRegistry,
+    UnitOfWork,
+)
 
 
 @dataclass
@@ -39,13 +44,16 @@ def registry() -> InstrumentationRegistry:
             identity_key=("id",),
             mapper_type=FakeAggregateMapper,
             exclude_from_tracking=frozenset({"_events"}),
-        )
+        ),
     )
     return reg
 
 
 @pytest.fixture
-def uow(fake_connection: AsyncMock, registry: InstrumentationRegistry) -> UnitOfWork:
+def uow(
+    fake_connection: AsyncMock,
+    registry: InstrumentationRegistry,
+) -> UnitOfWork:
     return UnitOfWork(fake_connection, registry)
 
 
