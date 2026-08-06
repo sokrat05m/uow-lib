@@ -5,7 +5,7 @@ dependencies = []
 version = "0.1.8"
 description = "Generic Unit of Work pattern implementation for Python"
 license = "MIT"
-authors = [{name = "Sokrat Magomedov"}]
+authors = [{ name = "Sokrat Magomedov" }]
 readme = "README.md"
 keywords = ["unit-of-work", "uow", "repository-pattern"]
 classifiers = [
@@ -18,12 +18,7 @@ classifiers = [
 ]
 
 [dependency-groups]
-dev = [
-    "mypy>=2.3.0",
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
-    "ruff>=0.16.1",
-]
+dev = ["mypy>=2.3.0", "pytest>=9.1.1", "pytest-asyncio>=1.4.0", "ruff>=0.16.1"]
 
 [build-system]
 requires = ["uv_build>=0.11.1,<0.12.0"]
@@ -49,6 +44,7 @@ pretty = true
 warn_unreachable = true
 color_output = true
 warn_unused_ignores = true
+strict = true
 
 [tool.ruff]
 target-version = "py314"
@@ -163,4 +159,3 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 asyncio_debug = true
-

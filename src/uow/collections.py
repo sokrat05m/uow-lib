@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, Callable, Iterable, Mapping, Protocol, SupportsIndex
 
 
@@ -73,7 +75,7 @@ class DirtySet[T](set[T]):
         super().add(item)
         self._on_change()
 
-    def discard(self, item: T) -> None:
+    def discard(self, item: T) -> None:  # type: ignore[override]
         if item in self:
             super().discard(item)
             self._on_change()
@@ -126,11 +128,11 @@ class DirtyDict[K, V](dict[K, V]):
         self._on_change()
         return result
 
-    def update(
+    def update(  # type: ignore[override]
         self,
         m: Mapping[K, V] | Iterable[tuple[K, V]] = (),
         **kwargs: Any,
-    ) -> None:  # type: ignore[override]
+    ) -> None:
         super().update(m, **kwargs)
         self._on_change()
 
@@ -261,7 +263,7 @@ class TrackedSet[T](set[T]):
             super().add(item)
             self._on_add(item)
 
-    def discard(self, item: T) -> None:
+    def discard(self, item: T) -> None:  # type: ignore[override]
         ensure_materialized(self)
         if item in self:
             super().discard(item)

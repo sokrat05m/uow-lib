@@ -23,7 +23,7 @@ class UUIDId:
 
     def __eq__(self, other: object) -> bool:
         if type(self) is type(other):
-            return self.value == cast("UUIDId", other).value
+            return self.value == other.value
         return NotImplemented
 
     def __hash__(self) -> int:
