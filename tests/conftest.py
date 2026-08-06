@@ -13,7 +13,6 @@ from uow import (
     UnitOfWork,
 )
 
-
 # ── Shared domain objects ────────────────────────────────────────
 
 
@@ -110,7 +109,7 @@ def order_registry() -> InstrumentationRegistry:
                 "delivery": SingleOf(Delivery),
             },
             depends_on=[],
-        )
+        ),
     )
     reg.register(
         EntityConfig(
@@ -119,7 +118,7 @@ def order_registry() -> InstrumentationRegistry:
             mapper_type=FakeItemMapper,
             children={},
             depends_on=[Order],
-        )
+        ),
     )
     reg.register(
         EntityConfig(
@@ -128,7 +127,7 @@ def order_registry() -> InstrumentationRegistry:
             mapper_type=FakeDeliveryMapper,
             children={},
             depends_on=[Order],
-        )
+        ),
     )
     return reg
 

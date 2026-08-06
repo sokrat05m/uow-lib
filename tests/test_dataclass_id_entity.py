@@ -14,7 +14,6 @@ from uow import (
     UnitOfWork,
 )
 
-
 # ── Value-object IDs ────────────────────────────────────────────
 
 
@@ -23,8 +22,8 @@ class UUIDId:
     value: UUID
 
     def __eq__(self, other: object) -> bool:
-        if type(self) == type(other):
-            return self.value == cast(UUIDId, other).value
+        if type(self) is type(other):
+            return self.value == other.value
         return NotImplemented
 
     def __hash__(self) -> int:
@@ -114,7 +113,7 @@ def user_uow() -> UnitOfWork:
             entity_type=User,
             identity_key=("entity_id",),
             mapper_type=FakeUserMapper,
-        )
+        ),
     )
     return UnitOfWork(AsyncMock(), reg)
 
@@ -127,14 +126,14 @@ def multi_uow() -> UnitOfWork:
             entity_type=User,
             identity_key=("entity_id",),
             mapper_type=FakeUserMapper,
-        )
+        ),
     )
     reg.register(
         EntityConfig(
             entity_type=Project,
             identity_key=("entity_id",),
             mapper_type=FakeProjectMapper,
-        )
+        ),
     )
     return UnitOfWork(AsyncMock(), reg)
 
@@ -150,9 +149,7 @@ class TestDataclassIdClean:
         ops = user_uow._build_operations()
         assert ops == []
 
-    def test_scalar_change_produces_update(
-        self, user_uow: UnitOfWork
-    ) -> None:
+    def test_scalar_change_produces_update(self, user_uow: UnitOfWork) -> None:
         user = User(entity_id=UserId(uuid4()), full_name="Alice")
         user_uow.register_clean(user)
 
@@ -177,9 +174,7 @@ class TestDataclassIdClean:
 
 
 class TestDataclassIdNew:
-    def test_new_entity_produces_insert(
-        self, user_uow: UnitOfWork
-    ) -> None:
+    def test_new_entity_produces_insert(self, user_uow: UnitOfWork) -> None:
         user = User(entity_id=UserId(uuid4()), full_name="Alice")
         user_uow.register_new(user)
 
@@ -211,7 +206,8 @@ class TestDataclassIdIdentityMap:
         assert ops == []
 
     def test_same_uuid_different_id_types_are_independent(
-        self, multi_uow: UnitOfWork
+        self,
+        multi_uow: UnitOfWork,
     ) -> None:
         raw_uuid = uuid4()
         user = User(entity_id=UserId(raw_uuid), full_name="Alice")
@@ -226,13 +222,14 @@ class TestDataclassIdIdentityMap:
 
 class TestDataclassIdCommit:
     @pytest.mark.asyncio
-    async def test_flush_duplicate_identity_during_cleanup_rolls_back_and_detaches(
-        self, user_uow: UnitOfWork
+    async def test_flush_duplicate_identity_during_cleanup_rolls_back_and_detaches(  # noqa: E501
+        self,
+        user_uow: UnitOfWork,
     ) -> None:
         uid = UserId(uuid4())
         user1 = User(entity_id=uid, full_name="Alice")
         user2 = User(entity_id=uid, full_name="Bob")
-        connection = cast(AsyncMock, user_uow._connection)
+        connection = cast("AsyncMock", user_uow._connection)
 
         user_uow.register_new(user1)
         user_uow.register_new(user2)
@@ -248,13 +245,14 @@ class TestDataclassIdCommit:
         assert "_uow_tracker_" not in user2.__dict__
 
     @pytest.mark.asyncio
-    async def test_commit_duplicate_identity_during_cleanup_rolls_back_before_commit(
-        self, user_uow: UnitOfWork
+    async def test_commit_duplicate_identity_during_cleanup_rolls_back_before_commit(  # noqa: E501
+        self,
+        user_uow: UnitOfWork,
     ) -> None:
         uid = UserId(uuid4())
         user1 = User(entity_id=uid, full_name="Alice")
         user2 = User(entity_id=uid, full_name="Bob")
-        connection = cast(AsyncMock, user_uow._connection)
+        connection = cast("AsyncMock", user_uow._connection)
 
         user_uow.register_new(user1)
         user_uow.register_new(user2)
@@ -305,7 +303,8 @@ class TestDataclassIdCommit:
 
     @pytest.mark.asyncio
     async def test_second_mutation_after_commit(
-        self, user_uow: UnitOfWork
+        self,
+        user_uow: UnitOfWork,
     ) -> None:
         user = User(entity_id=UserId(uuid4()), full_name="Alice")
         user_uow.register_clean(user)

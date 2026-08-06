@@ -23,9 +23,7 @@ class BaseEntity:
 
 
 class Employee(BaseEntity):
-    def __init__(
-        self, entity_id: int | None, department: str
-    ) -> None:
+    def __init__(self, entity_id: int | None, department: str) -> None:
         super().__init__(entity_id)
         self.department = department
 
@@ -99,7 +97,7 @@ def account_uow() -> UnitOfWork:
             entity_type=Account,
             identity_key=("account_id",),
             mapper_type=FakeAccountMapper,
-        )
+        ),
     )
     return UnitOfWork(AsyncMock(), reg)
 
@@ -112,7 +110,7 @@ def employee_uow() -> UnitOfWork:
             entity_type=Employee,
             identity_key=("entity_id",),
             mapper_type=FakeEmployeeMapper,
-        )
+        ),
     )
     return UnitOfWork(AsyncMock(), reg)
 
@@ -125,7 +123,7 @@ def color_uow() -> UnitOfWork:
             entity_type=Color,
             identity_key=("_color_id",),
             mapper_type=FakeColorMapper,
-        )
+        ),
     )
     return UnitOfWork(AsyncMock(), reg)
 
@@ -139,7 +137,8 @@ class TestPrivateAttrTracking:
         assert ops == []
 
     def test_private_attr_change_via_method_produces_update(
-        self, color_uow: UnitOfWork
+        self,
+        color_uow: UnitOfWork,
     ) -> None:
         color = Color(color_id=1, name="Red")
         color_uow.register_clean(color)
@@ -154,7 +153,8 @@ class TestPrivateAttrTracking:
         assert entities == [color]
 
     def test_private_attr_direct_change_produces_update(
-        self, color_uow: UnitOfWork
+        self,
+        color_uow: UnitOfWork,
     ) -> None:
         color = Color(color_id=1, name="Red")
         color_uow.register_clean(color)
@@ -166,9 +166,7 @@ class TestPrivateAttrTracking:
         assert ops[0][0].value == "update"
 
     @pytest.mark.asyncio
-    async def test_commit_calls_mapper(
-        self, color_uow: UnitOfWork
-    ) -> None:
+    async def test_commit_calls_mapper(self, color_uow: UnitOfWork) -> None:
         color = Color(color_id=1, name="Red")
         color_uow.register_clean(color)
         color.change_name("Blue")
@@ -180,9 +178,7 @@ class TestPrivateAttrTracking:
         assert color in mapper.updated
 
     @pytest.mark.asyncio
-    async def test_commit_cleans_state(
-        self, color_uow: UnitOfWork
-    ) -> None:
+    async def test_commit_cleans_state(self, color_uow: UnitOfWork) -> None:
         color = Color(color_id=1, name="Red")
         color_uow.register_clean(color)
         color.change_name("Blue")
@@ -202,7 +198,8 @@ class TestPlainClassEntity:
         assert ops == []
 
     def test_scalar_change_produces_update(
-        self, account_uow: UnitOfWork
+        self,
+        account_uow: UnitOfWork,
     ) -> None:
         account = Account(account_id=1, name="Alice")
         account_uow.register_clean(account)
@@ -216,9 +213,7 @@ class TestPlainClassEntity:
         assert entity_type is Account
         assert entities == [account]
 
-    def test_new_entity_produces_insert(
-        self, account_uow: UnitOfWork
-    ) -> None:
+    def test_new_entity_produces_insert(self, account_uow: UnitOfWork) -> None:
         account = Account(account_id=None, name="Alice")
         account_uow.register_new(account)
 
@@ -238,9 +233,7 @@ class TestPlainClassEntity:
         assert ops[0][0].value == "delete"
 
     @pytest.mark.asyncio
-    async def test_commit_calls_mapper(
-        self, account_uow: UnitOfWork
-    ) -> None:
+    async def test_commit_calls_mapper(self, account_uow: UnitOfWork) -> None:
         account = Account(account_id=1, name="Alice")
         account_uow.register_clean(account)
         account.name = "Bob"
@@ -252,9 +245,7 @@ class TestPlainClassEntity:
         assert account in mapper.updated
 
     @pytest.mark.asyncio
-    async def test_commit_cleans_state(
-        self, account_uow: UnitOfWork
-    ) -> None:
+    async def test_commit_cleans_state(self, account_uow: UnitOfWork) -> None:
         account = Account(account_id=1, name="Alice")
         account_uow.register_clean(account)
         account.name = "Bob"
@@ -274,7 +265,8 @@ class TestInheritedPlainClassEntity:
         assert ops == []
 
     def test_own_field_change_produces_update(
-        self, employee_uow: UnitOfWork
+        self,
+        employee_uow: UnitOfWork,
     ) -> None:
         emp = Employee(entity_id=1, department="Engineering")
         employee_uow.register_clean(emp)
@@ -289,7 +281,8 @@ class TestInheritedPlainClassEntity:
         assert entities == [emp]
 
     def test_inherited_field_change_produces_update(
-        self, employee_uow: UnitOfWork
+        self,
+        employee_uow: UnitOfWork,
     ) -> None:
         emp = Employee(entity_id=1, department="Engineering")
         employee_uow.register_clean(emp)
@@ -302,7 +295,8 @@ class TestInheritedPlainClassEntity:
         assert ops[0][1] is Employee
 
     def test_new_entity_produces_insert(
-        self, employee_uow: UnitOfWork
+        self,
+        employee_uow: UnitOfWork,
     ) -> None:
         emp = Employee(entity_id=None, department="Engineering")
         employee_uow.register_new(emp)
@@ -313,9 +307,7 @@ class TestInheritedPlainClassEntity:
         assert ops[0][1] is Employee
 
     @pytest.mark.asyncio
-    async def test_commit_calls_mapper(
-        self, employee_uow: UnitOfWork
-    ) -> None:
+    async def test_commit_calls_mapper(self, employee_uow: UnitOfWork) -> None:
         emp = Employee(entity_id=1, department="Engineering")
         employee_uow.register_clean(emp)
         emp.department = "Sales"

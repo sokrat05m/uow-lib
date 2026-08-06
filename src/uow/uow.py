@@ -51,7 +51,10 @@ class UnitOfWork:
         )
         self._entries[id(entity)] = entry
         self._instrumentor.wrap_eager(entity, config)
-        entry.collection_refs = ChildTracker.snapshot_collection_refs(entity, config)
+        entry.collection_refs = ChildTracker.snapshot_collection_refs(
+            entity,
+            config,
+        )
         self._children.register_all_new(entity, config)
 
     def register_clean(self, entity: object) -> None:
@@ -76,14 +79,17 @@ class UnitOfWork:
         self._entries[id(entity)] = entry
         tracker.install()
         self._instrumentor.wrap_lazy(entity, config)
-        entry.collection_refs = ChildTracker.snapshot_collection_refs(entity, config)
+        entry.collection_refs = ChildTracker.snapshot_collection_refs(
+            entity,
+            config,
+        )
         self._children.register_singles_clean(entity, config)
 
     def register_deleted(self, entity: object) -> None:
         entry = self._entries.get(id(entity))
         if entry is None:
             raise UntrackedEntityError(
-                f"{type(entity).__name__} is not tracked by this UoW"
+                f"{type(entity).__name__} is not tracked by this UoW",
             )
         entry.state = _EntityState.DELETED
         self._children.mark_deleted(entity, entry.config)
@@ -142,9 +148,12 @@ class UnitOfWork:
                 groups[(OpType.INSERT, entity_type)].append(entry.entity)
             elif entry.state is _EntityState.DELETED:
                 groups[(OpType.DELETE, entity_type)].append(entry.entity)
-            elif entry.state is _EntityState.CLEAN:
-                if entry.tracker and entry.tracker.is_dirty:
-                    groups[(OpType.UPDATE, entity_type)].append(entry.entity)
+            elif (
+                entry.state is _EntityState.CLEAN
+                and entry.tracker
+                and entry.tracker.is_dirty
+            ):
+                groups[(OpType.UPDATE, entity_type)].append(entry.entity)
 
         return [(op, et, ents) for (op, et), ents in groups.items()]
 
@@ -167,11 +176,17 @@ class UnitOfWork:
                 if old_value is not None and id(old_value) in self._entries:
                     self._entries[id(old_value)].state = _EntityState.DELETED
 
-                if new_value is not None and id(new_value) not in self._entries:
+                if (
+                    new_value is not None
+                    and id(new_value) not in self._entries
+                ):
                     child_spec = entry.config.children[attr_name]
                     if isinstance(child_spec, SingleOf):
                         ChildTracker.set_parent_key(
-                            entry.entity, new_value, child_spec, entry.config
+                            entry.entity,
+                            new_value,
+                            child_spec,
+                            entry.config,
                         )
                     self.register_new(new_value)
 
@@ -181,7 +196,9 @@ class UnitOfWork:
                 continue
 
             dirty_fields = (
-                entry.tracker.get_dirty_fields() if entry.tracker is not None else None
+                entry.tracker.get_dirty_fields()
+                if entry.tracker is not None
+                else None
             )
             should_rewrap = entry.state is _EntityState.NEW
 
@@ -194,14 +211,16 @@ class UnitOfWork:
                     continue
 
                 current_collection = cast(
-                    Iterable[object] | None,
+                    "Iterable[object] | None",
                     getattr(entry.entity, attr_name, None),
                 )
                 if current_collection is old_collection:
                     continue
 
                 old_children = (
-                    {} if old_collection is None else {id(child): child for child in old_collection}
+                    {}
+                    if old_collection is None
+                    else {id(child): child for child in old_collection}
                 )
                 current_children = (
                     {}
@@ -237,7 +256,10 @@ class UnitOfWork:
     # ── Helpers ──────────────────────────────────────────────────
 
     @staticmethod
-    def _get_identity(entity: object, config: EntityConfig) -> tuple[object, ...]:
+    def _get_identity(
+        entity: object,
+        config: EntityConfig,
+    ) -> tuple[object, ...]:
         return tuple(getattr(entity, attr) for attr in config.identity_key)
 
     @staticmethod
@@ -264,13 +286,18 @@ class UnitOfWork:
                 if entry.tracker:
                     entry.tracker.reset()
                 else:
-                    tracker = ChangeTracker(entry.entity, entry.config.tracked_attrs)
+                    tracker = ChangeTracker(
+                        entry.entity,
+                        entry.config.tracked_attrs,
+                    )
                     tracker.install()
                     entry.tracker = tracker
                     identity = self._get_identity(entry.entity, entry.config)
                     if not self._is_identity_empty(identity):
                         self._identity_map.put(
-                            type(entry.entity), identity, entry.entity
+                            type(entry.entity),
+                            identity,
+                            entry.entity,
                         )
                 self._instrumentor.wrap_lazy(entry.entity, entry.config)
                 entry.collection_refs = ChildTracker.snapshot_collection_refs(

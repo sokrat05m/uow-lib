@@ -3,12 +3,19 @@ from collections.abc import Iterable
 from typing import Any, Callable, cast
 
 from uow.children import ChildTracker
-from uow.collections import DirtyDict, DirtyList, DirtySet, TrackedList, TrackedSet
+from uow.collections import (
+    DirtyDict,
+    DirtyList,
+    DirtySet,
+    TrackedList,
+    TrackedSet,
+)
 from uow.instrumentation import EntityConfig, ListOf, SetOf
-from uow.tracking import ChangeTracker, _TRACKER_ATTR
+from uow.tracking import _TRACKER_ATTR, ChangeTracker
 
 _DIRTY_WRAPPERS: dict[
-    type, type[DirtyList[Any]] | type[DirtySet[Any]] | type[DirtyDict[Any, Any]]
+    type,
+    type[DirtyList[Any]] | type[DirtySet[Any]] | type[DirtyDict[Any, Any]],
 ] = {
     list: DirtyList,
     set: DirtySet,
@@ -19,7 +26,7 @@ _DIRTY_WRAPPERS: dict[
 def _fire_dirty(entity: object, attr_name: str) -> None:
     tracker: ChangeTracker | None = entity.__dict__.get(_TRACKER_ATTR)
     if tracker is not None:
-        tracker._dirty_fields.add(attr_name)
+        tracker._dirty_fields.add(attr_name)  # noqa: SLF001
 
 
 class CollectionInstrumentor:
@@ -59,14 +66,15 @@ class CollectionInstrumentor:
             on_remove = children.on_removed
             on_materialize: Callable[[], None] | None = None
             if lazy:
-                collection = cast(Iterable[object] | None, child_value)
+                collection = cast("Iterable[object] | None", child_value)
                 on_materialize = functools.partial(
                     children.register_collection_clean,
                     collection,
                 )
 
             if isinstance(child_spec, ListOf) and not isinstance(
-                child_value, TrackedList
+                child_value,
+                TrackedList,
             ):
                 tracked_list = TrackedList(
                     child_value,
@@ -76,7 +84,8 @@ class CollectionInstrumentor:
                 )
                 object.__setattr__(entity, attr_name, tracked_list)
             elif isinstance(child_spec, SetOf) and not isinstance(
-                child_value, TrackedSet
+                child_value,
+                TrackedSet,
             ):
                 tracked_set = TrackedSet(
                     child_value,

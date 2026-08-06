@@ -3,15 +3,6 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock
 
 import pytest
-
-from uow import (
-    EntityConfig,
-    GenericDataMapper,
-    InstrumentationRegistry,
-    UnitOfWork,
-)
-from uow.flush import sort_operations
-
 from conftest import (
     Delivery,
     FakeDeliveryMapper,
@@ -20,6 +11,14 @@ from conftest import (
     Order,
     OrderItem,
 )
+
+from uow import (
+    EntityConfig,
+    GenericDataMapper,
+    InstrumentationRegistry,
+    UnitOfWork,
+)
+from uow.flush import sort_operations
 
 
 class TestRegisterClean:
@@ -30,7 +29,10 @@ class TestRegisterClean:
         ops = order_uow._build_operations()
         assert ops == []
 
-    def test_scalar_change_produces_update(self, order_uow: UnitOfWork) -> None:
+    def test_scalar_change_produces_update(
+        self,
+        order_uow: UnitOfWork,
+    ) -> None:
         order = Order(id=1, customer="Alice", items=[], delivery=None)
         order_uow.register_clean(order)
 
@@ -79,7 +81,8 @@ class TestListTracking:
         assert insert_ops[0][2] == [new_item]
 
     def test_append_to_list_with_single_sibling_registers_new(
-        self, order_uow: UnitOfWork
+        self,
+        order_uow: UnitOfWork,
     ) -> None:
         delivery = Delivery(id=20, address="123 Main")
         order = Order(id=1, customer="Alice", items=[], delivery=delivery)
@@ -94,7 +97,10 @@ class TestListTracking:
         assert insert_ops[0][1] is OrderItem
         assert insert_ops[0][2] == [new_item]
 
-    def test_remove_from_list_marks_deleted(self, order_uow: UnitOfWork) -> None:
+    def test_remove_from_list_marks_deleted(
+        self,
+        order_uow: UnitOfWork,
+    ) -> None:
         item = OrderItem(id=10, product="Z", qty=1)
         order = Order(id=1, customer="Alice", items=[item], delivery=None)
         order_uow.register_clean(order)
@@ -123,7 +129,10 @@ class TestSingleOfReplacement:
         assert any(op[1] is Delivery for op in delete_ops)
         assert any(op[1] is Delivery for op in insert_ops)
 
-    def test_self_assign_single_child_is_noop(self, order_uow: UnitOfWork) -> None:
+    def test_self_assign_single_child_is_noop(
+        self,
+        order_uow: UnitOfWork,
+    ) -> None:
         delivery = Delivery(id=1, address="Main St")
         order = Order(id=1, customer="Alice", items=[], delivery=delivery)
         order_uow.register_clean(order)
@@ -155,8 +164,14 @@ class TestFlushOrder:
         class FakeSubMapper(GenericDataMapper[Subscription]):
             def __init__(self, conn: object) -> None: ...
             async def save(self, entities: Iterable[Subscription]) -> None: ...
-            async def update(self, entities: Iterable[Subscription]) -> None: ...
-            async def delete(self, entities: Iterable[Subscription]) -> None: ...
+            async def update(
+                self,
+                entities: Iterable[Subscription],
+            ) -> None: ...
+            async def delete(
+                self,
+                entities: Iterable[Subscription],
+            ) -> None: ...
 
         reg = InstrumentationRegistry()
         reg.register(
@@ -166,7 +181,7 @@ class TestFlushOrder:
                 mapper_type=FakeUserMapper,
                 children={},
                 depends_on=[],
-            )
+            ),
         )
         reg.register(
             EntityConfig(
@@ -175,7 +190,7 @@ class TestFlushOrder:
                 mapper_type=FakeSubMapper,
                 children={},
                 depends_on=[],
-            )
+            ),
         )
 
         conn = AsyncMock()
@@ -213,8 +228,14 @@ class TestFlushOrder:
         class FakeSubMapper(GenericDataMapper[Subscription]):
             def __init__(self, conn: object) -> None: ...
             async def save(self, entities: Iterable[Subscription]) -> None: ...
-            async def update(self, entities: Iterable[Subscription]) -> None: ...
-            async def delete(self, entities: Iterable[Subscription]) -> None: ...
+            async def update(
+                self,
+                entities: Iterable[Subscription],
+            ) -> None: ...
+            async def delete(
+                self,
+                entities: Iterable[Subscription],
+            ) -> None: ...
 
         reg = InstrumentationRegistry()
         reg.register(
@@ -224,7 +245,7 @@ class TestFlushOrder:
                 mapper_type=FakeUserMapper,
                 children={},
                 depends_on=[],
-            )
+            ),
         )
         reg.register(
             EntityConfig(
@@ -233,7 +254,7 @@ class TestFlushOrder:
                 mapper_type=FakeSubMapper,
                 children={},
                 depends_on=[],
-            )
+            ),
         )
 
         conn = AsyncMock()

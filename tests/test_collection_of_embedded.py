@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from uow import GenericDataMapper, InstrumentationRegistry, EntityConfig, UnitOfWork
+from uow import (
+    EntityConfig,
+    GenericDataMapper,
+    InstrumentationRegistry,
+    UnitOfWork,
+)
 
 
 @dataclass(frozen=True)
@@ -47,7 +52,7 @@ def registry() -> InstrumentationRegistry:
             identity_key=("id",),
             mapper_type=FakeCompanyMapper,
             children={"addresses": CollectionOfEmbedded(Address)},
-        )
+        ),
     )
     return reg
 
@@ -62,7 +67,11 @@ def uow(
 
 class TestCollectionOfEmbeddedTracking:
     def test_append_marks_dirty(self, uow: UnitOfWork) -> None:
-        company = Company(id=1, name="Corp", addresses=[Address("Main", "NYC")])
+        company = Company(
+            id=1,
+            name="Corp",
+            addresses=[Address("Main", "NYC")],
+        )
         uow.register_clean(company)
 
         company.addresses.append(Address("Oak", "LA"))
@@ -97,5 +106,5 @@ class TestCollectionOfEmbeddedTracking:
                     identity_key=("id",),
                     mapper_type=FakeCompanyMapper,
                     children={"addresses": CollectionOfEmbedded(MutableVO)},
-                )
+                ),
             )
