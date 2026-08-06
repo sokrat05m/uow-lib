@@ -1,0 +1,127 @@
+name: CI
+
+on:
+    push:
+        branches:
+            - "**"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    setup:
+        runs-on: ubuntu-latest
+
+        steps:
+            - &checkout
+              name: Check out repository
+              uses: actions/checkout@v4
+
+            - &setup_python
+              name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.14"
+
+            - name: Set up uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  enable-cache: true
+
+            - name: Install dependencies
+              run: uv sync --all-groups
+
+            - name: Pack virtualenv
+              run: tar -czf uv-venv.tar.gz .venv
+
+            - name: Upload virtualenv
+              uses: actions/upload-artifact@v4
+              with:
+                  name: uv-venv
+                  path: uv-venv.tar.gz
+                  retention-days: 1
+
+    mypy:
+        needs: setup
+        runs-on: ubuntu-latest
+
+        steps:
+            - *checkout
+
+            - *setup_python
+
+            - name: Download virtualenv
+              uses: actions/download-artifact@v4
+              with:
+                  name: uv-venv
+                  path: .
+
+            - name: Unpack virtualenv
+              run: tar -xzf uv-venv.tar.gz
+
+            - name: Run mypy
+              run: .venv/bin/python -m mypy src tests
+
+    ruff-format:
+        needs: setup
+        runs-on: ubuntu-latest
+
+        steps:
+            - *checkout
+
+            - *setup_python
+
+            - name: Download virtualenv
+              uses: actions/download-artifact@v4
+              with:
+                  name: uv-venv
+                  path: .
+
+            - name: Unpack virtualenv
+              run: tar -xzf uv-venv.tar.gz
+
+            - name: Check formatting
+              run: .venv/bin/ruff format --check src tests
+
+    ruff-check:
+        needs: setup
+        runs-on: ubuntu-latest
+
+        steps:
+            - *checkout
+
+            - *setup_python
+
+            - name: Download virtualenv
+              uses: actions/download-artifact@v4
+              with:
+                  name: uv-venv
+                  path: .
+
+            - name: Unpack virtualenv
+              run: tar -xzf uv-venv.tar.gz
+
+            - name: Run ruff
+              run: .venv/bin/ruff check --output-format=github src tests
+
+    tests:
+        needs: setup
+        runs-on: ubuntu-latest
+
+        steps:
+            - *checkout
+
+            - *setup_python
+
+            - name: Download virtualenv
+              uses: actions/download-artifact@v4
+              with:
+                  name: uv-venv
+                  path: .
+
+            - name: Unpack virtualenv
+              run: tar -xzf uv-venv.tar.gz
+
+            - name: Run tests
+              run: .venv/bin/python -m pytest -q
