@@ -21,13 +21,11 @@ from dataclasses import dataclass, field
 from collections.abc import Iterable
 
 from uow import (
-    Connection,
     EntityConfig,
-    GenericDataMapper,
     InstrumentationRegistry,
     ListOf,
-    UnitOfWork,
 )
+from uow.asyncio import Connection, GenericDataMapper, UnitOfWork
 
 
 @dataclass
@@ -358,6 +356,18 @@ For synchronous adapters, use the matching protocols from `uow.sync`; their
 methods have the same names but are regular `def` methods instead of
 `async def`.
 
+Import the async protocols and Unit of Work from `uow.asyncio`:
+
+```python
+from uow.asyncio import Connection, GenericDataMapper, UnitOfWork
+```
+
+Import the sync protocols and Unit of Work from `uow.sync`:
+
+```python
+from uow.sync import Connection, GenericDataMapper, UnitOfWork
+```
+
 ### Excluding fields from tracking
 
 Use `exclude_from_tracking` for attributes that should never trigger updates,
@@ -376,7 +386,8 @@ EntityConfig(
 
 ### Main classes
 
-- `UnitOfWork(connection, registry)`
+- `uow.asyncio.UnitOfWork(connection, registry)`
+- `uow.sync.UnitOfWork(connection, registry)`
 - `InstrumentationRegistry`
 - `EntityConfig`
 
@@ -395,8 +406,10 @@ EntityConfig(
 
 ### Protocols
 
-- `Connection`
-- `GenericDataMapper[T]`
+- `uow.asyncio.Connection`
+- `uow.asyncio.GenericDataMapper[T]`
+- `uow.sync.Connection`
+- `uow.sync.GenericDataMapper[T]`
 
 ### Exceptions
 
