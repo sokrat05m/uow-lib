@@ -1,11 +1,10 @@
 import ast
 import inspect
 import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
 from uow import UnregisteredEntityError
-from uow.mapper import GenericDataMapper
 
 
 @dataclass(frozen=True)
@@ -65,7 +64,7 @@ def _extract_init_attrs(cls: type) -> set[str]:
 class EntityConfig:
     entity_type: type
     identity_key: tuple[str, ...]
-    mapper_type: type[GenericDataMapper[Any]]
+    mapper_type: Callable[[object], object]
     children: dict[str, ChildSpec] = field(default_factory=dict)
     depends_on: list[type] = field(default_factory=list)
     exclude_from_tracking: frozenset[str] = field(default_factory=frozenset)
