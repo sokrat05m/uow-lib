@@ -21,13 +21,11 @@ from dataclasses import dataclass, field
 from collections.abc import Iterable
 
 from uow import (
-    Connection,
     EntityConfig,
-    GenericDataMapper,
     InstrumentationRegistry,
     ListOf,
-    UnitOfWork,
 )
+from uow.asyncio import Connection, GenericDataMapper, UnitOfWork
 
 
 @dataclass
@@ -106,6 +104,55 @@ async def update_order(conn: Connection, order: Order) -> None:
 
     await uow.commit()
 ```
+
+## Sync API
+
+For synchronous database drivers, import the sync protocols and Unit of Work
+from `uow.sync`.
+
+```python
+from collections.abc import Iterable
+
+from uow import EntityConfig, InstrumentationRegistry
+from uow.sync import Connection, GenericDataMapper, UnitOfWork
+
+
+class OrderMapper(GenericDataMapper[Order]):
+    def __init__(self, conn: Connection) -> None:
+        self.conn = conn
+
+    def save(self, entities: Iterable[Order]) -> None: ...
+
+    def update(self, entities: Iterable[Order]) -> None: ...
+
+    def delete(self, entities: Iterable[Order]) -> None: ...
+
+
+registry = InstrumentationRegistry()
+registry.register(
+    EntityConfig(
+        entity_type=Order,
+        identity_key=("id",),
+        mapper_type=OrderMapper,
+    )
+)
+
+
+def create_order(conn: Connection) -> None:
+    uow = UnitOfWork(conn, registry)
+
+    order = Order(id=None, customer="Alice")
+    uow.register_new(order)
+    uow.commit()
+```
+
+The sync `UnitOfWork` exposes the same lifecycle methods as the async one:
+
+| Method | Behavior |
+|--------|----------|
+| `flush()` | Detects changes and calls sync mapper operations |
+| `commit()` | `flush()` plus `connection.commit()` |
+| `rollback()` | Calls `connection.rollback()` and detaches all tracked state |
 
 ## Core Concepts
 
@@ -305,6 +352,21 @@ class GenericDataMapper[T](Protocol):
 ```
 
 Any async database adapter can be used as long as it satisfies those protocols.
+For synchronous adapters, use the matching protocols from `uow.sync`; their
+methods have the same names but are regular `def` methods instead of
+`async def`.
+
+Import the async protocols and Unit of Work from `uow.asyncio`:
+
+```python
+from uow.asyncio import Connection, GenericDataMapper, UnitOfWork
+```
+
+Import the sync protocols and Unit of Work from `uow.sync`:
+
+```python
+from uow.sync import Connection, GenericDataMapper, UnitOfWork
+```
 
 ### Excluding fields from tracking
 
@@ -324,7 +386,8 @@ EntityConfig(
 
 ### Main classes
 
-- `UnitOfWork(connection, registry)`
+- `uow.asyncio.UnitOfWork(connection, registry)`
+- `uow.sync.UnitOfWork(connection, registry)`
 - `InstrumentationRegistry`
 - `EntityConfig`
 
@@ -343,8 +406,10 @@ EntityConfig(
 
 ### Protocols
 
-- `Connection`
-- `GenericDataMapper[T]`
+- `uow.asyncio.Connection`
+- `uow.asyncio.GenericDataMapper[T]`
+- `uow.sync.Connection`
+- `uow.sync.GenericDataMapper[T]`
 
 ### Exceptions
 
