@@ -43,6 +43,17 @@ class TodoMapper(GenericDataMapper[Todo]):
     def __init__(self, connection: object) -> None:
         self._db = cast("SQLiteConnection", connection).db
 
+    def map_obj(self, row: aiosqlite.Row) -> Todo:
+        return Todo(id=UUID(row[0]), title=row[1], is_done=bool(row[2]))
+
+    async def get_all(self) -> list[Todo]:
+        cursor = await self._db.execute(
+            "select id, title, is_done from todo order by id",
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [self.map_obj(row) for row in rows]
+
     async def save(self, entities: Iterable[Todo]) -> None:
         for entity in entities:
             cursor = await self._db.execute(
@@ -69,6 +80,37 @@ class TodoMapper(GenericDataMapper[Todo]):
 class TodoNoteMapper(GenericDataMapper[TodoNote]):
     def __init__(self, connection: object) -> None:
         self._db = cast("SQLiteConnection", connection).db
+
+    def map_obj(self, row: aiosqlite.Row) -> TodoNote:
+        return TodoNote(id=UUID(row[0]), todo_id=UUID(row[1]), body=row[2])
+
+    async def get_by_todos(
+        self,
+        todos: list[UUID],
+    ) -> dict[UUID, list[TodoNote]]:
+        if not todos:
+            return {}
+        placeholders = ", ".join("?" for _ in todos)
+        query = f"""
+            select id, todo_id, body
+            from todo_note
+            where todo_id in ({placeholders})
+            order by id
+            """  # noqa: S608
+        cursor = await self._db.execute(
+            query,
+            [str(todo_id) for todo_id in todos],
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        notes_by_todo_id: dict[UUID, list[TodoNote]] = {}
+        for row in rows:
+            note = self.map_obj(row)
+            notes_by_todo_id.setdefault(
+                cast("UUID", note.todo_id),
+                [],
+            ).append(note)
+        return notes_by_todo_id
 
     async def save(self, entities: Iterable[TodoNote]) -> None:
         for entity in entities:
@@ -103,32 +145,17 @@ class TodoNoteMapper(GenericDataMapper[TodoNote]):
 
 class TodoGateway:
     def __init__(self, connection: SQLiteConnection) -> None:
-        self._db = connection.db
+        self._todo_mapper = TodoMapper(connection)
+        self._note_mapper = TodoNoteMapper(connection)
 
     async def list_todos(self) -> list[Todo]:
-        cursor = await self._db.execute(
-            "select id, title, is_done from todo order by id",
+        todos = await self._todo_mapper.get_all()
+        notes_by_todo_id = await self._note_mapper.get_by_todos(
+            [todo.id for todo in todos],
         )
-        rows = await cursor.fetchall()
-        await cursor.close()
-        todos: list[Todo] = []
-        for row in rows:
-            todo = Todo(id=UUID(row[0]), title=row[1], is_done=bool(row[2]))
-            notes_cursor = await self._db.execute(
-                """
-                select id, todo_id, body
-                from todo_note
-                where todo_id = ?
-                order by id
-                """,
-                (str(todo.id),),
-            )
-            todo.notes = [
-                TodoNote(id=UUID(note[0]), todo_id=UUID(note[1]), body=note[2])
-                for note in await notes_cursor.fetchall()
-            ]
-            await notes_cursor.close()
-            todos.append(todo)
+
+        for todo in todos:
+            todo.notes = notes_by_todo_id.get(todo.id, [])
         return todos
 
 
